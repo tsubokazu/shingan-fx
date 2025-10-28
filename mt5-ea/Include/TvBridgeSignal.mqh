@@ -13,10 +13,18 @@
 //| Handle a single signal and execute corresponding trade action    |
 //+------------------------------------------------------------------+
 bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
-                  double balancePerLot, double minLot, double maxLot)
+                  double balancePerLot, double minLot, double maxLot,
+                  bool closeBeforeEntry, bool autoStopLoss, int slLookback, double slBuffer)
 {
    if(sig.action == "BUY")
    {
+      // エントリー前の全決済（オプション）
+      if(closeBeforeEntry)
+      {
+         PrintFormat("[TvBridgeSignal] Closing all positions for %s before BUY entry", sig.symbol);
+         CloseAll(sig.symbol);
+      }
+
       // Worker側から volume が指定されていない（0.0）場合は EA 側で計算
       double actualVolume = sig.volume;
 
@@ -42,10 +50,17 @@ bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
                      sig.key, sig.symbol, actualVolume);
       }
 
-      return OpenBuy(sig.symbol, actualVolume);
+      return OpenBuy(sig.symbol, actualVolume, autoStopLoss, slLookback, slBuffer);
    }
    else if(sig.action == "SELL")
    {
+      // エントリー前の全決済（オプション）
+      if(closeBeforeEntry)
+      {
+         PrintFormat("[TvBridgeSignal] Closing all positions for %s before SELL entry", sig.symbol);
+         CloseAll(sig.symbol);
+      }
+
       // Worker側から volume が指定されていない（0.0）場合は EA 側で計算
       double actualVolume = sig.volume;
 
@@ -71,7 +86,7 @@ bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
                      sig.key, sig.symbol, actualVolume);
       }
 
-      return OpenSell(sig.symbol, actualVolume);
+      return OpenSell(sig.symbol, actualVolume, autoStopLoss, slLookback, slBuffer);
    }
    else if(sig.action == "CLOSE_PARTIAL")
    {
@@ -96,7 +111,8 @@ bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
 //| Process all signals and return array of successfully processed keys |
 //+------------------------------------------------------------------+
 int ProcessSignals(const Signal &signals[], string &successKeys[], double defaultLot,
-                   string lotMode, double balancePerLot, double minLot, double maxLot)
+                   string lotMode, double balancePerLot, double minLot, double maxLot,
+                   bool closeBeforeEntry, bool autoStopLoss, int slLookback, double slBuffer)
 {
    int signalCount = ArraySize(signals);
    int successCount = 0;
@@ -105,7 +121,8 @@ int ProcessSignals(const Signal &signals[], string &successKeys[], double defaul
 
    for(int i = 0; i < signalCount; i++)
    {
-      bool success = HandleSignal(signals[i], defaultLot, lotMode, balancePerLot, minLot, maxLot);
+      bool success = HandleSignal(signals[i], defaultLot, lotMode, balancePerLot, minLot, maxLot,
+                                   closeBeforeEntry, autoStopLoss, slLookback, slBuffer);
 
       if(success)
       {

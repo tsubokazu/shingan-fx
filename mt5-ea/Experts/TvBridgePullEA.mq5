@@ -29,6 +29,12 @@ input string InpLotMode = "FIXED";              // Lot calculation mode: FIXED o
 input double InpBalancePerLot = 10000;          // Balance per 1.0 lot (for BALANCE_RATIO mode)
 input double InpMinLot = 0.01;                  // Minimum lot size
 input double InpMaxLot = 100.0;                 // Maximum lot size
+input bool   InpCloseBeforeEntry = true;        // Close all positions before new entry
+
+input group "=== Stop Loss Settings ==="
+input bool   InpAutoStopLoss = true;            // Auto set SL based on recent swing
+input int    InpStopLossLookback = 30;          // Lookback bars for swing high/low
+input double InpStopLossBuffer = 1.0;           // SL buffer in percentage (e.g., 1.0 = 1%)
 
 input group "=== Error Handling ==="
 input int    InpMaxConsecutiveErrors = 5; // Max consecutive errors before alert
@@ -134,7 +140,9 @@ void OnTimer()
    // Process signals
    string successKeys[];
    int successCount = ProcessSignals(signals, successKeys, InpDefaultLot,
-                                      InpLotMode, InpBalancePerLot, InpMinLot, InpMaxLot);
+                                      InpLotMode, InpBalancePerLot, InpMinLot, InpMaxLot,
+                                      InpCloseBeforeEntry, InpAutoStopLoss,
+                                      InpStopLossLookback, InpStopLossBuffer);
 
    g_totalSignalsProcessed += successCount;
 

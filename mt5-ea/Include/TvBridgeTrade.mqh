@@ -75,7 +75,81 @@ double CalculateBalanceRatioLot(double baseLot, double balancePerLot, double min
 }
 
 //+------------------------------------------------------------------+
-//| Calculate SL/TP prices                                           |
+//| Get recent low price from N bars                                 |
+//+------------------------------------------------------------------+
+double GetRecentLow(string symbol, int lookbackBars)
+{
+   double low = DBL_MAX;
+
+   for(int i = 1; i <= lookbackBars; i++)
+   {
+      double barLow = iLow(symbol, PERIOD_CURRENT, i);
+      if(barLow < low)
+         low = barLow;
+   }
+
+   return (low == DBL_MAX) ? 0 : low;
+}
+
+//+------------------------------------------------------------------+
+//| Get recent high price from N bars                                |
+//+------------------------------------------------------------------+
+double GetRecentHigh(string symbol, int lookbackBars)
+{
+   double high = 0;
+
+   for(int i = 1; i <= lookbackBars; i++)
+   {
+      double barHigh = iHigh(symbol, PERIOD_CURRENT, i);
+      if(barHigh > high)
+         high = barHigh;
+   }
+
+   return high;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate SL based on swing high/low with buffer                 |
+//+------------------------------------------------------------------+
+double CalculateStopLossFromSwing(string symbol, ENUM_ORDER_TYPE orderType, double price,
+                                   int lookbackBars, double bufferPercent)
+{
+   if(lookbackBars <= 0 || bufferPercent < 0)
+      return 0;
+
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   double sl = 0;
+
+   if(orderType == ORDER_TYPE_BUY)
+   {
+      // LONG時: 直近安値 - バッファ
+      double recentLow = GetRecentLow(symbol, lookbackBars);
+      if(recentLow > 0)
+      {
+         double buffer = recentLow * (bufferPercent / 100.0);
+         sl = NormalizeDouble(recentLow - buffer, digits);
+         PrintFormat("[TvBridgeTrade] BUY SL: recent_low=%.5f, buffer=%.5f (%.1f%%), sl=%.5f",
+                     recentLow, buffer, bufferPercent, sl);
+      }
+   }
+   else if(orderType == ORDER_TYPE_SELL)
+   {
+      // SHORT時: 直近高値 + バッファ
+      double recentHigh = GetRecentHigh(symbol, lookbackBars);
+      if(recentHigh > 0)
+      {
+         double buffer = recentHigh * (bufferPercent / 100.0);
+         sl = NormalizeDouble(recentHigh + buffer, digits);
+         PrintFormat("[TvBridgeTrade] SELL SL: recent_high=%.5f, buffer=%.5f (%.1f%%), sl=%.5f",
+                     recentHigh, buffer, bufferPercent, sl);
+      }
+   }
+
+   return sl;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate SL/TP prices (legacy method using pips)                |
 //+------------------------------------------------------------------+
 double CalculateStopLoss(string symbol, ENUM_ORDER_TYPE orderType, double price)
 {
@@ -114,7 +188,8 @@ double CalculateTakeProfit(string symbol, ENUM_ORDER_TYPE orderType, double pric
 //+------------------------------------------------------------------+
 //| Open Buy position                                                |
 //+------------------------------------------------------------------+
-bool OpenBuy(string symbol, double volume)
+bool OpenBuy(string symbol, double volume, bool autoStopLoss = false,
+             int slLookback = 30, double slBuffer = 1.0)
 {
    double lot = NormalizeLotSize(symbol, volume);
    if(lot <= 0)
@@ -124,14 +199,25 @@ bool OpenBuy(string symbol, double volume)
    }
 
    double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
-   double sl = CalculateStopLoss(symbol, ORDER_TYPE_BUY, ask);
+   double sl = 0;
    double tp = CalculateTakeProfit(symbol, ORDER_TYPE_BUY, ask);
+
+   // SL設定: autoStopLoss が有効ならスイング高値/安値ベース、無効ならピップスベース
+   if(autoStopLoss)
+   {
+      sl = CalculateStopLossFromSwing(symbol, ORDER_TYPE_BUY, ask, slLookback, slBuffer);
+   }
+   else
+   {
+      sl = CalculateStopLoss(symbol, ORDER_TYPE_BUY, ask);
+   }
 
    bool result = g_trade.Buy(lot, symbol, 0, sl, tp, InpTradeComment);
 
    if(result)
    {
-      PrintFormat("[TvBridgeTrade] BUY order opened: %s, lot=%.2f, price=%.5f", symbol, lot, ask);
+      PrintFormat("[TvBridgeTrade] BUY order opened: %s, lot=%.2f, price=%.5f, sl=%.5f, tp=%.5f",
+                  symbol, lot, ask, sl, tp);
    }
    else
    {
@@ -144,7 +230,8 @@ bool OpenBuy(string symbol, double volume)
 //+------------------------------------------------------------------+
 //| Open Sell position                                               |
 //+------------------------------------------------------------------+
-bool OpenSell(string symbol, double volume)
+bool OpenSell(string symbol, double volume, bool autoStopLoss = false,
+              int slLookback = 30, double slBuffer = 1.0)
 {
    double lot = NormalizeLotSize(symbol, volume);
    if(lot <= 0)
@@ -154,14 +241,25 @@ bool OpenSell(string symbol, double volume)
    }
 
    double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
-   double sl = CalculateStopLoss(symbol, ORDER_TYPE_SELL, bid);
+   double sl = 0;
    double tp = CalculateTakeProfit(symbol, ORDER_TYPE_SELL, bid);
+
+   // SL設定: autoStopLoss が有効ならスイング高値/安値ベース、無効ならピップスベース
+   if(autoStopLoss)
+   {
+      sl = CalculateStopLossFromSwing(symbol, ORDER_TYPE_SELL, bid, slLookback, slBuffer);
+   }
+   else
+   {
+      sl = CalculateStopLoss(symbol, ORDER_TYPE_SELL, bid);
+   }
 
    bool result = g_trade.Sell(lot, symbol, 0, sl, tp, InpTradeComment);
 
    if(result)
    {
-      PrintFormat("[TvBridgeTrade] SELL order opened: %s, lot=%.2f, price=%.5f", symbol, lot, bid);
+      PrintFormat("[TvBridgeTrade] SELL order opened: %s, lot=%.2f, price=%.5f, sl=%.5f, tp=%.5f",
+                  symbol, lot, bid, sl, tp);
    }
    else
    {
