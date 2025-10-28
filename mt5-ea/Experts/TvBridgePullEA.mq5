@@ -36,6 +36,10 @@ input bool   InpAutoStopLoss = true;            // Auto set SL based on recent s
 input int    InpStopLossLookback = 30;          // Lookback bars for swing high/low
 input double InpStopLossBuffer = 1.0;           // SL buffer in percentage (e.g., 1.0 = 1%)
 
+input group "=== Trailing Stop Settings ==="
+input bool   InpTrailingStopOnTP = true;        // Enable trailing stop on TP signal
+input double InpTrailingStopRatio = 0.5;        // Trailing stop ratio (0.5 = 50% of profit)
+
 input group "=== Error Handling ==="
 input int    InpMaxConsecutiveErrors = 5; // Max consecutive errors before alert
 
@@ -142,7 +146,8 @@ void OnTimer()
    int successCount = ProcessSignals(signals, successKeys, InpDefaultLot,
                                       InpLotMode, InpBalancePerLot, InpMinLot, InpMaxLot,
                                       InpCloseBeforeEntry, InpAutoStopLoss,
-                                      InpStopLossLookback, InpStopLossBuffer);
+                                      InpStopLossLookback, InpStopLossBuffer,
+                                      InpTrailingStopOnTP, InpTrailingStopRatio);
 
    g_totalSignalsProcessed += successCount;
 

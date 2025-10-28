@@ -302,9 +302,119 @@ bool CloseAll(string symbol)
 }
 
 //+------------------------------------------------------------------+
+//| Update trailing stop for remaining positions after partial close |
+//+------------------------------------------------------------------+
+bool UpdateTrailingStop(string symbol, double trailingRatio)
+{
+   if(trailingRatio <= 0 || trailingRatio > 1.0)
+   {
+      PrintFormat("[TvBridgeTrade] Invalid trailing ratio: %.2f", trailingRatio);
+      return false;
+   }
+
+   int updated = 0;
+   int total = PositionsTotal();
+
+   for(int i = total - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket <= 0)
+         continue;
+
+      if(PositionGetString(POSITION_SYMBOL) != symbol)
+         continue;
+
+      double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double currentSL = PositionGetDouble(POSITION_SL);
+      double currentTP = PositionGetDouble(POSITION_TP);
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+
+      double currentPrice = (posType == POSITION_TYPE_BUY)
+                            ? SymbolInfoDouble(symbol, SYMBOL_BID)
+                            : SymbolInfoDouble(symbol, SYMBOL_ASK);
+
+      int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+      double newSL = 0;
+
+      // 利益を計算
+      double profit = 0;
+      if(posType == POSITION_TYPE_BUY)
+      {
+         profit = currentPrice - entryPrice;
+         if(profit > 0)
+         {
+            newSL = NormalizeDouble(entryPrice + (profit * trailingRatio), digits);
+
+            // 既存のSLより有利な場合のみ更新
+            if(currentSL <= 0 || newSL > currentSL)
+            {
+               if(g_trade.PositionModify(ticket, newSL, currentTP))
+               {
+                  updated++;
+                  PrintFormat("[TvBridgeTrade] Trailing stop updated: ticket=%I64u, entry=%.5f, current=%.5f, old_sl=%.5f, new_sl=%.5f (%.1f%%)",
+                              ticket, entryPrice, currentPrice, currentSL, newSL, trailingRatio * 100);
+               }
+               else
+               {
+                  PrintFormat("[TvBridgeTrade] Failed to update trailing stop: ticket=%I64u, error=%d", ticket, GetLastError());
+               }
+            }
+            else
+            {
+               PrintFormat("[TvBridgeTrade] Trailing stop not updated (current SL is better): ticket=%I64u, current_sl=%.5f, calculated=%.5f",
+                           ticket, currentSL, newSL);
+            }
+         }
+         else
+         {
+            PrintFormat("[TvBridgeTrade] No profit yet for BUY position: ticket=%I64u, entry=%.5f, current=%.5f",
+                        ticket, entryPrice, currentPrice);
+         }
+      }
+      else if(posType == POSITION_TYPE_SELL)
+      {
+         profit = entryPrice - currentPrice;
+         if(profit > 0)
+         {
+            newSL = NormalizeDouble(entryPrice - (profit * trailingRatio), digits);
+
+            // 既存のSLより有利な場合のみ更新
+            if(currentSL <= 0 || newSL < currentSL)
+            {
+               if(g_trade.PositionModify(ticket, newSL, currentTP))
+               {
+                  updated++;
+                  PrintFormat("[TvBridgeTrade] Trailing stop updated: ticket=%I64u, entry=%.5f, current=%.5f, old_sl=%.5f, new_sl=%.5f (%.1f%%)",
+                              ticket, entryPrice, currentPrice, currentSL, newSL, trailingRatio * 100);
+               }
+               else
+               {
+                  PrintFormat("[TvBridgeTrade] Failed to update trailing stop: ticket=%I64u, error=%d", ticket, GetLastError());
+               }
+            }
+            else
+            {
+               PrintFormat("[TvBridgeTrade] Trailing stop not updated (current SL is better): ticket=%I64u, current_sl=%.5f, calculated=%.5f",
+                           ticket, currentSL, newSL);
+            }
+         }
+         else
+         {
+            PrintFormat("[TvBridgeTrade] No profit yet for SELL position: ticket=%I64u, entry=%.5f, current=%.5f",
+                        ticket, entryPrice, currentPrice);
+         }
+      }
+   }
+
+   PrintFormat("[TvBridgeTrade] Trailing stop: %d positions updated for %s (ratio=%.1f%%)",
+               updated, symbol, trailingRatio * 100);
+   return (updated > 0);
+}
+
+//+------------------------------------------------------------------+
 //| Close partial positions for a symbol by ratio                    |
 //+------------------------------------------------------------------+
-bool ClosePartial(string symbol, double ratio)
+bool ClosePartial(string symbol, double ratio, bool enableTrailing = false, double trailingRatio = 0.5)
 {
    if(ratio <= 0 || ratio > 1.0)
    {
@@ -359,6 +469,14 @@ bool ClosePartial(string symbol, double ratio)
    }
 
    PrintFormat("[TvBridgeTrade] ClosePartial: %d positions closed (%.1f%%) for %s", closed, ratio * 100, symbol);
+
+   // トレーリングストップを実行（部分決済後）
+   if(closed > 0 && enableTrailing)
+   {
+      PrintFormat("[TvBridgeTrade] Applying trailing stop after partial close...");
+      UpdateTrailingStop(symbol, trailingRatio);
+   }
+
    return (closed > 0);
 }
 //+------------------------------------------------------------------+

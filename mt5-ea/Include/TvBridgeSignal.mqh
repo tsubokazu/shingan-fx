@@ -14,7 +14,8 @@
 //+------------------------------------------------------------------+
 bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
                   double balancePerLot, double minLot, double maxLot,
-                  bool closeBeforeEntry, bool autoStopLoss, int slLookback, double slBuffer)
+                  bool closeBeforeEntry, bool autoStopLoss, int slLookback, double slBuffer,
+                  bool trailingStopOnTP, double trailingStopRatio)
 {
    if(sig.action == "BUY")
    {
@@ -90,9 +91,10 @@ bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
    }
    else if(sig.action == "CLOSE_PARTIAL")
    {
-      PrintFormat("[TvBridgeSignal] Processing CLOSE_PARTIAL signal: key=%s, symbol=%s, ratio=%.2f",
-                  sig.key, sig.symbol, sig.volume_ratio);
-      return ClosePartial(sig.symbol, sig.volume_ratio);
+      PrintFormat("[TvBridgeSignal] Processing CLOSE_PARTIAL signal: key=%s, symbol=%s, ratio=%.2f, trailing=%s",
+                  sig.key, sig.symbol, sig.volume_ratio,
+                  trailingStopOnTP ? "enabled" : "disabled");
+      return ClosePartial(sig.symbol, sig.volume_ratio, trailingStopOnTP, trailingStopRatio);
    }
    else if(sig.action == "CLOSE")
    {
@@ -112,7 +114,8 @@ bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
 //+------------------------------------------------------------------+
 int ProcessSignals(const Signal &signals[], string &successKeys[], double defaultLot,
                    string lotMode, double balancePerLot, double minLot, double maxLot,
-                   bool closeBeforeEntry, bool autoStopLoss, int slLookback, double slBuffer)
+                   bool closeBeforeEntry, bool autoStopLoss, int slLookback, double slBuffer,
+                   bool trailingStopOnTP, double trailingStopRatio)
 {
    int signalCount = ArraySize(signals);
    int successCount = 0;
@@ -122,7 +125,8 @@ int ProcessSignals(const Signal &signals[], string &successKeys[], double defaul
    for(int i = 0; i < signalCount; i++)
    {
       bool success = HandleSignal(signals[i], defaultLot, lotMode, balancePerLot, minLot, maxLot,
-                                   closeBeforeEntry, autoStopLoss, slLookback, slBuffer);
+                                   closeBeforeEntry, autoStopLoss, slLookback, slBuffer,
+                                   trailingStopOnTP, trailingStopRatio);
 
       if(success)
       {
