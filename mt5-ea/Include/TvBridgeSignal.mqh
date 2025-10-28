@@ -12,19 +12,66 @@
 //+------------------------------------------------------------------+
 //| Handle a single signal and execute corresponding trade action    |
 //+------------------------------------------------------------------+
-bool HandleSignal(const Signal &sig)
+bool HandleSignal(const Signal &sig, double defaultLot, string lotMode,
+                  double balancePerLot, double minLot, double maxLot)
 {
    if(sig.action == "BUY")
    {
-      PrintFormat("[TvBridgeSignal] Processing BUY signal: key=%s, symbol=%s, volume=%.2f",
-                  sig.key, sig.symbol, sig.volume);
-      return OpenBuy(sig.symbol, sig.volume);
+      // Worker側から volume が指定されていない（0.0）場合は EA 側で計算
+      double actualVolume = sig.volume;
+
+      if(actualVolume <= 0)
+      {
+         // ロット計算モードに応じて決定
+         if(lotMode == "BALANCE_RATIO")
+         {
+            actualVolume = CalculateBalanceRatioLot(defaultLot, balancePerLot, minLot, maxLot);
+            PrintFormat("[TvBridgeSignal] Processing BUY signal: key=%s, symbol=%s, volume=%.2f (balance ratio)",
+                        sig.key, sig.symbol, actualVolume);
+         }
+         else
+         {
+            actualVolume = defaultLot;
+            PrintFormat("[TvBridgeSignal] Processing BUY signal: key=%s, symbol=%s, volume=%.2f (fixed)",
+                        sig.key, sig.symbol, actualVolume);
+         }
+      }
+      else
+      {
+         PrintFormat("[TvBridgeSignal] Processing BUY signal: key=%s, symbol=%s, volume=%.2f (from signal)",
+                     sig.key, sig.symbol, actualVolume);
+      }
+
+      return OpenBuy(sig.symbol, actualVolume);
    }
    else if(sig.action == "SELL")
    {
-      PrintFormat("[TvBridgeSignal] Processing SELL signal: key=%s, symbol=%s, volume=%.2f",
-                  sig.key, sig.symbol, sig.volume);
-      return OpenSell(sig.symbol, sig.volume);
+      // Worker側から volume が指定されていない（0.0）場合は EA 側で計算
+      double actualVolume = sig.volume;
+
+      if(actualVolume <= 0)
+      {
+         // ロット計算モードに応じて決定
+         if(lotMode == "BALANCE_RATIO")
+         {
+            actualVolume = CalculateBalanceRatioLot(defaultLot, balancePerLot, minLot, maxLot);
+            PrintFormat("[TvBridgeSignal] Processing SELL signal: key=%s, symbol=%s, volume=%.2f (balance ratio)",
+                        sig.key, sig.symbol, actualVolume);
+         }
+         else
+         {
+            actualVolume = defaultLot;
+            PrintFormat("[TvBridgeSignal] Processing SELL signal: key=%s, symbol=%s, volume=%.2f (fixed)",
+                        sig.key, sig.symbol, actualVolume);
+         }
+      }
+      else
+      {
+         PrintFormat("[TvBridgeSignal] Processing SELL signal: key=%s, symbol=%s, volume=%.2f (from signal)",
+                     sig.key, sig.symbol, actualVolume);
+      }
+
+      return OpenSell(sig.symbol, actualVolume);
    }
    else if(sig.action == "CLOSE_PARTIAL")
    {
@@ -48,7 +95,8 @@ bool HandleSignal(const Signal &sig)
 //+------------------------------------------------------------------+
 //| Process all signals and return array of successfully processed keys |
 //+------------------------------------------------------------------+
-int ProcessSignals(const Signal &signals[], string &successKeys[])
+int ProcessSignals(const Signal &signals[], string &successKeys[], double defaultLot,
+                   string lotMode, double balancePerLot, double minLot, double maxLot)
 {
    int signalCount = ArraySize(signals);
    int successCount = 0;
@@ -57,7 +105,7 @@ int ProcessSignals(const Signal &signals[], string &successKeys[])
 
    for(int i = 0; i < signalCount; i++)
    {
-      bool success = HandleSignal(signals[i]);
+      bool success = HandleSignal(signals[i], defaultLot, lotMode, balancePerLot, minLot, maxLot);
 
       if(success)
       {

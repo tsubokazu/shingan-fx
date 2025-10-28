@@ -44,10 +44,11 @@ interface TradeDirective {
 	volume_ratio?: number;
 }
 
-function getDefaultLot(env: Env): number {
-	const parsed = parseFloat(env.DEFAULT_LOT ?? '0');
-	return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.1;
-}
+// EA 側でロット決定するため現在は未使用（将来的な拡張のため保持）
+// function getDefaultLot(env: Env): number {
+// 	const parsed = parseFloat(env.DEFAULT_LOT ?? '0');
+// 	return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.1;
+// }
 
 function getTpCloseRatio(env: Env): number {
 	const parsed = parseFloat(env.TP_CLOSE_RATIO ?? '0');
@@ -66,14 +67,14 @@ function decideAction(message: TvQueueMessage, env: Env): TradeDirective | null 
 			return {
 				type: 'OPEN',
 				side: 'BUY',
-				volume: getDefaultLot(env),
+				// volume は EA 側で決定するため送信しない
 				comment: baseComment,
 			};
 		case 'SHORT':
 			return {
 				type: 'OPEN',
 				side: 'SELL',
-				volume: getDefaultLot(env),
+				// volume は EA 側で決定するため送信しない
 				comment: baseComment,
 			};
 		case 'TP':

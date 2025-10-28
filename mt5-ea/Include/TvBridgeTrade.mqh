@@ -48,6 +48,33 @@ double NormalizeLotSize(string symbol, double requestedLot)
 }
 
 //+------------------------------------------------------------------+
+//| Calculate lot size based on balance ratio                        |
+//| balancePerLot: 1.0 lot あたりの基準残高（例: 10000 = 1万ドルで1.0lot）|
+//+------------------------------------------------------------------+
+double CalculateBalanceRatioLot(double baseLot, double balancePerLot, double minLot, double maxLot)
+{
+   if(balancePerLot <= 0)
+   {
+      PrintFormat("[TvBridgeTrade] Invalid balancePerLot: %.2f, using base lot", balancePerLot);
+      return baseLot;
+   }
+
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double calculatedLot = (balance / balancePerLot) * baseLot;
+
+   // Apply min/max constraints
+   if(calculatedLot < minLot)
+      calculatedLot = minLot;
+   if(calculatedLot > maxLot)
+      calculatedLot = maxLot;
+
+   PrintFormat("[TvBridgeTrade] Balance ratio lot: balance=%.2f, ratio=%.2f, calculated=%.2f",
+               balance, balance / balancePerLot, calculatedLot);
+
+   return calculatedLot;
+}
+
+//+------------------------------------------------------------------+
 //| Calculate SL/TP prices                                           |
 //+------------------------------------------------------------------+
 double CalculateStopLoss(string symbol, ENUM_ORDER_TYPE orderType, double price)

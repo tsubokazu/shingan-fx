@@ -24,7 +24,11 @@ input int    InpPollIntervalSec = 2;      // Polling interval (seconds)
 input int    InpPollLimit = 10;           // Max signals per poll
 
 input group "=== Trade Settings ==="
-input double InpDefaultLot = 0.01;        // Default lot size (if signal doesn't specify)
+input double InpDefaultLot = 0.01;              // Default lot size (if signal doesn't specify)
+input string InpLotMode = "FIXED";              // Lot calculation mode: FIXED or BALANCE_RATIO
+input double InpBalancePerLot = 10000;          // Balance per 1.0 lot (for BALANCE_RATIO mode)
+input double InpMinLot = 0.01;                  // Minimum lot size
+input double InpMaxLot = 100.0;                 // Maximum lot size
 
 input group "=== Error Handling ==="
 input int    InpMaxConsecutiveErrors = 5; // Max consecutive errors before alert
@@ -129,7 +133,8 @@ void OnTimer()
 
    // Process signals
    string successKeys[];
-   int successCount = ProcessSignals(signals, successKeys);
+   int successCount = ProcessSignals(signals, successKeys, InpDefaultLot,
+                                      InpLotMode, InpBalancePerLot, InpMinLot, InpMaxLot);
 
    g_totalSignalsProcessed += successCount;
 
