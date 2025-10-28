@@ -174,23 +174,23 @@ void OnTimer()
    PrintFormat("[TvBridgePullEA] Received %d signal(s)", signalCount);
 
    // Process signals
-   string successKeys[];
-   int successCount = ProcessSignals(signals, successKeys, InpDefaultLot,
-                                      InpLotMode, InpBalancePerLot, InpMinLot, InpMaxLot,
-                                      InpCloseBeforeEntry, InpAutoStopLoss,
-                                      InpStopLossLookback, InpStopLossBuffer,
-                                      InpTrailingStopOnTP, InpTrailingStopRatio);
+   string ackKeys[];
+   int ackCount = ProcessSignals(signals, ackKeys, InpDefaultLot,
+                                  InpLotMode, InpBalancePerLot, InpMinLot, InpMaxLot,
+                                  InpCloseBeforeEntry, InpAutoStopLoss,
+                                  InpStopLossLookback, InpStopLossBuffer,
+                                  InpTrailingStopOnTP, InpTrailingStopRatio);
 
-   g_totalSignalsProcessed += successCount;
+   g_totalSignalsProcessed += ackCount;
 
-   if(successCount == 0)
+   if(ackCount == 0)
    {
-      PrintFormat("[TvBridgePullEA] No signals were successfully processed");
+      PrintFormat("[TvBridgePullEA] No signals to acknowledge (all were empty/invalid)");
       return;
    }
 
-   // Acknowledge successful signals
-   string ackBody = BuildAckRequestBody(successKeys);
+   // Acknowledge all signals (success or failure - to clear from queue)
+   string ackBody = BuildAckRequestBody(ackKeys);
 
    if(StringLen(ackBody) > 0)
    {
@@ -198,12 +198,12 @@ void OnTimer()
 
       if(ackResult)
       {
-         g_totalSignalsAcked += successCount;
-         PrintFormat("[TvBridgePullEA] Acknowledged %d signal(s)", successCount);
+         g_totalSignalsAcked += ackCount;
+         PrintFormat("[TvBridgePullEA] Acknowledged %d signal(s) (cleared from queue)", ackCount);
       }
       else
       {
-         PrintFormat("[TvBridgePullEA] Failed to acknowledge signals");
+         PrintFormat("[TvBridgePullEA] Failed to acknowledge signals - they will be retried");
       }
    }
 }

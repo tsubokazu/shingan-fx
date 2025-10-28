@@ -118,32 +118,41 @@ int ProcessSignals(const Signal &signals[], string &successKeys[], double defaul
                    bool trailingStopOnTP, double trailingStopRatio)
 {
    int signalCount = ArraySize(signals);
-   int successCount = 0;
+   int ackCount = 0;
 
    ArrayResize(successKeys, signalCount);
 
    for(int i = 0; i < signalCount; i++)
    {
+      // 空のシグナルをスキップ（JSONパース失敗）
+      if(StringLen(signals[i].key) == 0 || StringLen(signals[i].symbol) == 0)
+      {
+         PrintFormat("[TvBridgeSignal] Skipping empty signal at index %d", i);
+         continue;
+      }
+
       bool success = HandleSignal(signals[i], defaultLot, lotMode, balancePerLot, minLot, maxLot,
                                    closeBeforeEntry, autoStopLoss, slLookback, slBuffer,
                                    trailingStopOnTP, trailingStopRatio);
 
+      // 成功・失敗に関わらずACKする（キューから削除）
+      successKeys[ackCount] = signals[i].key;
+      ackCount++;
+
       if(success)
       {
-         successKeys[successCount] = signals[i].key;
-         successCount++;
          PrintFormat("[TvBridgeSignal] Signal processed successfully: key=%s", signals[i].key);
       }
       else
       {
-         PrintFormat("[TvBridgeSignal] Signal processing failed: key=%s, action=%s",
+         PrintFormat("[TvBridgeSignal] Signal processing failed (will ACK anyway): key=%s, action=%s",
                      signals[i].key, signals[i].action);
       }
    }
 
-   // Resize to actual success count
-   ArrayResize(successKeys, successCount);
+   // Resize to actual ACK count
+   ArrayResize(successKeys, ackCount);
 
-   return successCount;
+   return ackCount;
 }
 //+------------------------------------------------------------------+
