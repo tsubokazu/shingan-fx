@@ -108,3 +108,9 @@ pending:{symbol}:{timestamp(13桁)}:{idem}
 - Queueは `wrangler queues create tv_signals` で作成
 - Consumer Workerは別途デプロイが必要（2つの独立したWorker）
 - `docs/system_design.md` に詳細な設計ドキュメントあり
+
+## Git コミットメッセージのルール
+
+- **Claude Codeによる署名を含めない**: コミットメッセージに「Generated with Claude Code」や「Co-Authored-By: Claude」などの署名を含めないこと
+- 通常のConventional Commitsスタイルを使用（例: `feat:`, `fix:`, `chore:`, `docs:`）
+- 簡潔で明確なメッセージを記述

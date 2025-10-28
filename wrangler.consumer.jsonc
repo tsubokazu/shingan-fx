@@ -11,7 +11,7 @@
 	"queues": {
 		"consumers": [
 			{
-				"queue": "tv_signals",
+				"queue": "tv-signals",
 				"max_batch_size": 1,
 				"max_batch_timeout": 1
 			}
@@ -20,19 +20,19 @@
 	"kv_namespaces": [
 		{
 			"binding": "IDEMPOTENCY_KV",
-			"id": "__REPLACE_IDEMPOTENCY_NS__"
+			"id": "cf76af4fff47445a891fe4a4d95b5ae7"
 		},
 		{
 			"binding": "RATELIMIT_KV",
-			"id": "__REPLACE_RATELIMIT_NS__"
+			"id": "87ebb54f1dcb4d87822756db0db78cf5"
 		},
 		{
 			"binding": "MAPPING_KV",
-			"id": "__REPLACE_MAPPING_NS__"
+			"id": "bc90751113654108a53da1ef1c6cdff8"
 		},
 		{
 			"binding": "PENDING_SIGNALS_KV",
-			"id": "__REPLACE_PENDING_NS__"
+			"id": "a5488e7d0cb64966b8c5a6decf022069"
 		}
 	]
 }
