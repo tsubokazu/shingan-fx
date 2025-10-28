@@ -64,15 +64,23 @@ MT5 EA (pull)
 ```
 - token を JSON に含め、受信Workerで検証することでアクセス制御を強化。URL 秘匿と Cloudflare WAF の併用を前提。
 
-### 4.2 受信 Worker (`src/index.ts` 想定)
+### 4.2 受信 Worker (`src/index.ts`) ✅ **実装済み**
 - 責務: 認証、入力検証、Idempotency キー生成、Queue への非同期投入。
+- エンドポイント:
+  - **推奨**: `POST /webhook` (静的アセット競合回避)
+  - **後方互換**: `POST /` (旧バージョン対応)
+  - 末尾スラッシュの有無は自動正規化
+- 認証方法（3つサポート）:
+  1. `Authorization: Bearer <WEBHOOK_TOKEN>` ヘッダ（curl等API クライアント向け）
+  2. URLクエリパラメータ `?token=<WEBHOOK_TOKEN>`（**TradingView推奨**）
+  3. リクエストボディ内の `token` フィールド（TradingView代替）
 - 主な処理:
-  1. `Authorization: Bearer <WEBHOOK_TOKEN>` ヘッダ検証 (ヘッダ未対応の場合は Body の token を参照)。
+  1. 上記3つのいずれかの方法で認証トークンを検証。
   2. 必須フィールド (signal / symbol / timeframe / bar_time) の検証。
   3. `idem = sha1(symbol|timeframe|signal|bar_time)` を計算。
   4. Queue へメッセージ送信 (`TV_QUEUE.send(...)`)。
-  5. HTTP 200 応答。
-- エラーハンドリング: バリデーション失敗は 400、認証失敗は 403、それ以外は 500 (Cloudflare 既定の再試行は行わない)。
+  5. HTTP 200 応答 `{"status":"queued","idem":"..."}`。
+- エラーハンドリング: バリデーション失敗は 400、認証失敗は 403、それ以外は 500。
 
 ### 4.3 Cloudflare Queue
 - 名前: `tv_signals`。
@@ -87,34 +95,43 @@ MT5 EA (pull)
 - `MAPPING_KV`: TradingView シンボルとブローカーシンボルの対応表。例: `XAUUSD -> XAUUSD.a`。
 - オプション: `STRATEGY_PARAM_KV` に時間足や銘柄ごとの戦略パラメータを格納。
 
-### 4.5 Consumer Worker (`src/consumer.ts` 想定)
+### 4.5 Consumer Worker (`src/consumer.ts`) ✅ **実装済み**
 - イベント処理フロー:
   1. KV で idem を照合 (ヒットなら ACK して終了)。
   2. シンボルマッピングを適用し、許可対象外なら ACK。
   3. Rate limit (最小インターバル) を超過していないかチェック。
   4. 取引ロジック `decideAction()` を実行。
-  5. PendingSignals ストア（Durable Object もしくは KV）にシグナルを保存。（失敗時は例外として再試行）
+  5. PendingSignals KVにシグナルを保存（`pending:{symbol}:{timestamp}:{idem}` 形式）。
   6. 成功時に ACK、ログへ出力。
 - インフラ構成:
-  - デプロイ時は Webhook受信WorkerとConsumer Workerを別サービスとして管理。`wrangler.jsonc` はProducerバインディングのみを持ち、`wrangler.consumer.jsonc` で Queue コンシューマを定義する。
-  - PendingSignals ストアを Durable Object で実装する場合、Consumer Worker から DO を呼び出し格納する。
-- 取引ロジック例:
-  - `LONG` → 成行買い、`SHORT` → 成行売り。
-  - `TP` → ポジションの部分決済 (保有数やATRベースの比率を計算)。
-  - 追加指標ラベル (例えば `TP_LONG` / `TP_SHORT`) を個別に扱い可能。
-- 設定値は環境変数とKVで外部化:
-  - `MIN_INTERVAL_MS`, `DEFAULT_LOT`, `PARTIAL_TP_RATIO` など。
+  - Webhook受信WorkerとConsumer Workerを別サービスとして管理。
+  - `wrangler.jsonc` はProducerバインディングのみ。
+  - `wrangler.consumer.jsonc` で Queue コンシューマを定義。
+  - Worker名: `tv-bridge-consumer`
+- 取引ロジック実装 (`decideAction()`):
+  - `LONG` → `{type: 'OPEN', side: 'BUY', volume: DEFAULT_LOT}`
+  - `SHORT` → `{type: 'OPEN', side: 'SELL', volume: DEFAULT_LOT}`
+  - `TP` / `TP_LONG` / `TP_SHORT` → `{type: 'CLOSE_PARTIAL', volume_ratio: TP_CLOSE_RATIO}`
+  - その他のシグナルは `null` を返しACK（未対応シグナル）
+- 設定値（環境変数）:
+  - `MIN_INTERVAL_MS`: `"2000"` (デフォルト)
+  - `DEFAULT_LOT`: `"0.10"`
+  - `TP_CLOSE_RATIO`: `"0.5"` (50%部分決済)
 
-### 4.6 Polling API Worker（pull型 EA 連携）
+### 4.6 Polling API Worker（pull型 EA 連携）✅ **実装済み**
 - 役割: MT5 EA が一定間隔でアクセスし、未処理シグナルの取得・ACK を行う HTTP エンドポイントを提供。
-- 推奨エンドポイント例:
-  - `GET /api/poll?symbol=XAUUSD&limit=5` → 未処理シグナル配列を返却。
-  - `POST /api/ack` → EA が約定済みシグナルの `id` を送信し、PendingSignals から削除。
-- 認証: Bearer トークンまたは HMAC 署名。TradingView 用トークンとは分離する。
-- レイテンシ対策: 1～3 秒周期のポーリングで十分。Queue と PendingSignals の TTL は最低15分とし、取りこぼし時の再取得を許容。
-- 実装案:
-  - Durable Object でシグナルを時系列蓄積し、`fetch`/`ack` メソッドを提供。
-  - もしくは KV + Metadata を用いて `pending:{symbol}:{idem}` キーで保存し、ACK 時に削除。
+- エンドポイント（Producer Workerに統合）:
+  - `GET /api/poll?symbol=BTCUSD&limit=10` → 未処理シグナル配列を返却。
+    - レスポンス: `{"items": [{key, action, volume, volume_ratio, symbol, bar_time}]}`
+    - タイムスタンプ順でソート（古いものから）
+  - `POST /api/ack` → EA が約定済みシグナルの `keys` 配列を送信。
+    - リクエスト: `{"keys": ["pending:BTCUSD:...", ...]}`
+    - レスポンス: `{"acknowledged": 1, "missing": 0}`
+- 認証: `Authorization: Bearer <POLL_TOKEN>` (TradingView用トークンとは別管理)
+- 実装:
+  - PendingSignals KVから `pending:{symbol}:*` でプレフィックス検索
+  - ACK時はKVから該当キーを削除
+  - TTL: 24時間（自動削除）
 
 ### 4.7 PendingSignals ストア設計
 - Storage 選択肢:
@@ -123,10 +140,59 @@ MT5 EA (pull)
 - 保存フィールド: `id`（idem）、`symbol_norm`、`timeframe`、`signal`、元の payload、`enqueue_time`、`status`。
 - TTL: 24 時間程度。ACK の取りこぼし・EA停止の検知時に警報を出す。
 
-### 4.8 発注ロジック（EA側）
+### 4.8 MT5 Pull型EA (`TvBridgePullEA.mq5`) ✅ **実装完了**
+- **ファイル構成**:
+  - `mt5-ea/Experts/TvBridgePullEA.mq5` - メインEA
+  - `mt5-ea/Include/TvBridgeHttp.mqh` - HTTP通信（Poll/Ack）
+  - `mt5-ea/Include/TvBridgeJson.mqh` - JSON解析とシグナル構造体
+  - `mt5-ea/Include/TvBridgeTrade.mqh` - トレード実行（Buy/Sell/Close/ClosePartial）
+  - `mt5-ea/Include/TvBridgeSignal.mqh` - シグナルハンドリング
+  - `mt5-ea/Include/TvBridgeLogger.mqh` - ロギング機能
+- **動作フロー**:
+  1. `OnInit()` でタイマーを設定（デフォルト2秒、設定可能）
+  2. `OnTimer()` で定期的に `GET /api/poll` を実行
+  3. JSONレスポンスを解析してシグナル配列を取得
+  4. 各シグナルに対して注文を実行:
+     - `BUY` → 買い注文（0.10ロット）
+     - `SELL` → 売り注文（0.10ロット）
+     - `CLOSE_PARTIAL` → 指定比率で部分決済
+     - `CLOSE` → 全ポジション決済
+  5. 成功したシグナルの `key` を収集
+  6. `POST /api/ack` で処理済みを通知
+  7. KVから削除される
+- **パラメータ**:
+  - `InpBaseUrl`: Workers URL
+  - `InpPollToken`: 認証トークン（`POLL_TOKEN`）
+  - `InpSymbolFilter`: フィルタリングするシンボル（例: BTCUSD）
+  - `InpPollIntervalSec`: ポーリング間隔（秒）
+  - `InpPollLimit`: 1回で取得する最大シグナル数
+  - `InpDefaultLot`: デフォルトロットサイズ
+  - `InpStopLossPips`: ストップロス（pips、0=無効）
+  - `InpTakeProfitPips`: テイクプロフィット（pips、0=無効）
+- **エラーハンドリング**:
+  - WebRequest失敗時（4060エラー）の検知とログ出力
+  - 認証失敗（401/403）の検知
+  - 連続エラーカウントとアラート機能
+- **ログ機能**:
+  - ポーリング成功/失敗のログ
+  - シグナル取得・処理状況のログ
+  - 注文実行結果のログ
+  - ACK送信結果のログ
+- **設定要件**:
+  - MT5の「WebRequestを許可するURL」に Workers URLを追加
+  - VPS環境で24/7稼働推奨
+
+### 4.9 発注ロジック（EA側）✅ **実装完了**
 - Polling API から受け取った JSON を基に MT5 内で注文処理。
-- 例: `action: "OPEN"/"CLOSE_PARTIAL"`、`volume`、`volume_ratio` を MQL5 内で解釈。
-- ACK は注文が正常完了したタイミングで送信。失敗時は再取得されるよう idempotent 設計に。
+- シグナル構造体: `{key, action, volume, volume_ratio, symbol, bar_time}`
+- アクション解釈:
+  - `BUY` → `OrderSend()` で成行買い
+  - `SELL` → `OrderSend()` で成行売り
+  - `CLOSE_PARTIAL` → `PositionClosePartial()` で部分決済
+  - `CLOSE` → `PositionClose()` で全決済
+- ロットサイズ正規化: ブローカーの最小ロット・ステップに準拠
+- SL/TP計算: ピップス指定からブローカー価格への変換
+- ACK は注文が正常完了したタイミングで送信。失敗時は再取得されるよう idempotent 設計。
 
 ### 4.9 代替プッシュ構成
 - PineConnector など既製ブリッジを併用する場合は、PendingSignals から別Worker経由でPush通知する二経路構成も拡張として検討可。
@@ -183,12 +249,34 @@ MT5 EA (pull)
 - **Cloudflare 障害**: 重大障害時に備え、予備として AWS API Gateway + Lambda の代替ルートを設計しておく。
 - **戦略ロジックのバグ**: テストカバレッジを確保し、staging 環境で数日間デモ運用してから本番投入。
 
-## 11. 今後の拡張案
+## 11. 実装済みドキュメント
+
+### MT5 EA関連
+- **完全ガイド**: `mt5-ea/README.md` - EA設定、パラメータ、トラブルシューティング
+- **クイックスタート**: `mt5-ea/QUICKSTART.md` - 5分でセットアップ
+- **動作確認ガイド**: `mt5-ea/TEST_POLLING.md` - ポーリング動作のテスト方法
+- **設定例**: `mt5-ea/TvBridgePullEA_Settings_Example.txt` - パラメータ設定サンプル
+
+### TradingView連携
+- **詳細ガイド**: `docs/tradingview_alert_setup.md` - アラート設定の完全手順
+- **クイックスタート**: `docs/tradingview_quickstart.md` - 5分でアラート設定
+- **実装指示書**: `docs/mt5_pull_ea_guide.md` - Pull型EA実装仕様
+
+### テストスクリプト
+- `test-webhook.sh` - Webhook動作確認スクリプト
+- `test-signal.sh` - テストシグナル送信スクリプト
+
+### 運用URL
+- **Webhook**: `https://shiny-smoke-04f2.tsubokazu-dev.workers.dev/webhook?token=XXX`
+- **Polling API**: `https://shiny-smoke-04f2.tsubokazu-dev.workers.dev/api/poll?symbol=XXX&limit=N`
+
+## 12. 今後の拡張案
 - Durable Object を用いたポジション情報キャッシュとリアルタイムダッシュボード。
 - 多通貨対応の戦略パラメータ管理 (KV → D1 設定画面)。
 - アラート内容に SL/TP/ロット指定を含めるテンプレ対応。
 - 発注結果を逆方向に通知する Slack/Telegram Bot。
 - MT5 以外 (cTrader, NinjaTrader 等) への拡張モジュール化。
+- CLOSEシグナルの実装（全ポジション決済）。
 
 ---
-本設計書は Cloudflare Workers + Queues を基盤とした TradingView シグナル中継の初期版であり、戦略ロジックの詳細が固まり次第 `decideAction()` の仕様・テストケースを追記すること。
+**本設計書の実装状況**: フェーズ1完了（2025-10-28）。TradingView → Cloudflare Workers → MT5 の完全なパイプラインが稼働中。実際の取引で動作確認済み。

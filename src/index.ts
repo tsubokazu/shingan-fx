@@ -77,7 +77,17 @@ function extractBearerToken(request: Request): string | null {
 }
 
 function extractWebhookToken(request: Request, payload: TvPayload): string | null {
-	return extractBearerToken(request) ?? payload.token?.trim() ?? null;
+	// 1. Try Authorization header (for curl/API clients)
+	const headerToken = extractBearerToken(request);
+	if (headerToken) return headerToken;
+
+	// 2. Try URL query parameter (for TradingView webhook URL: ?token=XXX)
+	const url = new URL(request.url);
+	const queryToken = url.searchParams.get('token')?.trim();
+	if (queryToken) return queryToken;
+
+	// 3. Try payload token field (for TradingView webhook message body)
+	return payload.token?.trim() ?? null;
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -230,7 +240,10 @@ export default {
 			return handleAck(request, env);
 		}
 
-		if (request.method === 'POST') {
+		// Webhook endpoint: POST /webhook or POST / (for backwards compatibility)
+		// Support both /webhook and /webhook/ (with or without trailing slash)
+		const pathname = url.pathname.replace(/\/$/, ''); // Remove trailing slash
+		if (request.method === 'POST' && (pathname === '/webhook' || pathname === '')) {
 			return handleWebhook(request, env);
 		}
 

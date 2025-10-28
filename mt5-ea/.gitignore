@@ -1,0 +1,25 @@
+# MQL5 compiled files
+*.ex5
+*.ex4
+
+# MQL5 log files
+*.log
+
+# MQL5 setting files with sensitive data
+*.set
+
+# Backup files
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
