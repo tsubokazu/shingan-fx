@@ -63,6 +63,38 @@ int OnInit()
       return INIT_PARAMETERS_INCORRECT;
    }
 
+   // Check symbol availability
+   string currentSymbol = Symbol();
+   PrintFormat("[TvBridgePullEA] Current chart symbol: %s", currentSymbol);
+   PrintFormat("[TvBridgePullEA] Filter symbol: %s", InpSymbolFilter);
+
+   // Check if symbol exists in Market Watch
+   bool symbolExists = SymbolInfoInteger(InpSymbolFilter, SYMBOL_SELECT);
+   if(!symbolExists)
+   {
+      PrintFormat("[TvBridgePullEA] WARNING: Symbol '%s' not found in Market Watch!", InpSymbolFilter);
+      PrintFormat("[TvBridgePullEA] Available symbols in Market Watch:");
+
+      // List available symbols
+      int total = SymbolsTotal(true);
+      for(int i = 0; i < MathMin(total, 20); i++)
+      {
+         string sym = SymbolName(i, true);
+         if(StringFind(sym, "225") >= 0 || StringFind(sym, "NIKKEI") >= 0 || StringFind(sym, "Nikkei") >= 0)
+         {
+            PrintFormat("  - %s", sym);
+         }
+      }
+   }
+   else
+   {
+      PrintFormat("[TvBridgePullEA] Symbol '%s' found in Market Watch", InpSymbolFilter);
+
+      // Show symbol info
+      ENUM_SYMBOL_TRADE_MODE tradeMode = (ENUM_SYMBOL_TRADE_MODE)SymbolInfoInteger(InpSymbolFilter, SYMBOL_TRADE_MODE);
+      PrintFormat("[TvBridgePullEA] Trade mode: %d (0=disabled, 1=long only, 2=short only, 3=close only, 4=full)", tradeMode);
+   }
+
    if(InpPollIntervalSec < 1)
    {
       Alert("Poll interval must be at least 1 second.");
