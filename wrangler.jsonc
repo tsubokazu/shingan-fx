@@ -16,7 +16,36 @@
 	},
 	"observability": {
 		"enabled": true
-	}
+	},
+	"vars": {
+		"MIN_INTERVAL_MS": "2000"
+	},
+	"queues": {
+		"producers": [
+			{
+				"binding": "TV_QUEUE",
+				"queue": "tv_signals"
+			}
+		]
+	},
+	"kv_namespaces": [
+		{
+			"binding": "IDEMPOTENCY_KV",
+			"id": "__REPLACE_IDEMPOTENCY_NS__"
+		},
+		{
+			"binding": "RATELIMIT_KV",
+			"id": "__REPLACE_RATELIMIT_NS__"
+		},
+		{
+			"binding": "MAPPING_KV",
+			"id": "__REPLACE_MAPPING_NS__"
+		},
+		{
+			"binding": "PENDING_SIGNALS_KV",
+			"id": "__REPLACE_PENDING_NS__"
+		}
+	]
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

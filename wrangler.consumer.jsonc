@@ -1,0 +1,38 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "tv-bridge-consumer",
+	"main": "src/consumer.ts",
+	"compatibility_date": "2025-10-24",
+	"vars": {
+		"MIN_INTERVAL_MS": "2000",
+		"DEFAULT_LOT": "0.10",
+		"TP_CLOSE_RATIO": "0.5"
+	},
+	"queues": {
+		"consumers": [
+			{
+				"queue": "tv_signals",
+				"max_batch_size": 1,
+				"max_batch_timeout": 1
+			}
+		]
+	},
+	"kv_namespaces": [
+		{
+			"binding": "IDEMPOTENCY_KV",
+			"id": "__REPLACE_IDEMPOTENCY_NS__"
+		},
+		{
+			"binding": "RATELIMIT_KV",
+			"id": "__REPLACE_RATELIMIT_NS__"
+		},
+		{
+			"binding": "MAPPING_KV",
+			"id": "__REPLACE_MAPPING_NS__"
+		},
+		{
+			"binding": "PENDING_SIGNALS_KV",
+			"id": "__REPLACE_PENDING_NS__"
+		}
+	]
+}
