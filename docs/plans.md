@@ -15,16 +15,16 @@
 ### フェーズ1: 最小ルートの構築（Webhook→Queue→EA）
 - [x] wrangler プロジェクトの環境変数・バインディングを設定。
 - [ ] `wrangler.jsonc` の Queue 名称や KV Namespace ID を本番値へ差し替える。
-- [ ] 受信Worker (`src/index.ts`) を実装。
-  - [ ] Authorization検証・必須フィールドチェック・Idempotencyキー生成を組み込む。
-  - [ ] Queue へのメッセージ送信と即時ACK処理を実装。
+- [x] 受信Worker (`src/index.ts`) を実装。
+  - [x] Authorization検証・必須フィールドチェック・Idempotencyキー生成を組み込む。
+  - [x] Queue へのメッセージ送信と即時ACK処理を実装。
 - [ ] Queue `tv_signals` と KV (`IDEMPOTENCY_KV`, `RATELIMIT_KV`, `MAPPING_KV`) を作成。
 - [x] Consumer Worker (`src/consumer.ts`) を最小実装。
   - [x] 別サービス用 `wrangler.consumer.jsonc` を作成し、Queueコンシューマ設定を追加。
   - [x] KV 参照による重複排除・シンボル変換・レート制御を実装。
   - [x] PendingSignals ストア（Durable Object もしくは KV）へシグナルを蓄積する処理を実装。
 - [x] Polling API Worker を実装し、`GET /api/poll` と `POST /api/ack` を提供。
-- [ ] EA ポーリング用の認証トークン (`POLL_TOKEN`) を設定。
+- [x] EA ポーリング用の認証トークン (`POLL_TOKEN`) を設定。
 - [ ] TradingView 側でテストアラートを作成し、Webhook.site で経路確認後に受信Workerへ切り替える。
 - [ ] モックEA（curl や簡易スクリプト）で Polling API から取得→ACK の流れを確認。
 
